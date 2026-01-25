@@ -1,5 +1,3 @@
-# EasyShare
-
 # Easy Share
 
 <div align="center">
