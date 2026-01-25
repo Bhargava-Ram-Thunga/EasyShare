@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Icon } from '../common';
 import { StepCard } from './StepCard';
 
@@ -39,8 +40,8 @@ export function HowItWorks() {
               your data stays yours.
             </p>
           </div>
-          <a
-            href="#"
+          <Link
+            to="/docs"
             className="text-primary hover:text-white font-bold flex items-center gap-2 transition-colors group"
           >
             View Documentation
@@ -48,7 +49,7 @@ export function HowItWorks() {
               name="arrow_right_alt"
               className="transition-transform group-hover:translate-x-1"
             />
-          </a>
+          </Link>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 relative">

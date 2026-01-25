@@ -5,6 +5,7 @@ import { SharePage } from './pages/SharePage';
 import { ReceivePage } from './pages/ReceivePage';
 import { FilesPage } from './pages/FilesPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { DocsPage } from './pages/DocsPage';
 import { PrivacyPage } from './pages/PrivacyPage';
 import { TermsPage } from './pages/TermsPage';
 
@@ -18,6 +19,7 @@ function App() {
         <Route path="/receive" element={<ReceivePage />} />
         <Route path="/files" element={<FilesPage />} />
         <Route path="/history" element={<HistoryPage />} />
+        <Route path="/docs" element={<DocsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
       </Routes>
