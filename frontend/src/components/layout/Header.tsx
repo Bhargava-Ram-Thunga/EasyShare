@@ -18,23 +18,37 @@ const defaultNavItems: NavItem[] = [
   { to: "/history", label: "History" },
 ];
 
+const navIconMap: Record<string, string> = {
+  Share: "upload",
+  Receive: "download",
+  Files: "description",
+  History: "history",
+};
+
 export function Header({
   variant = "default",
   navItems = defaultNavItems,
   showMobileMenu = true
 }: HeaderProps) {
   const variants = {
-    default: "border-b border-border-dark bg-[#0f2422]/90 backdrop-blur-md",
-    glass: "glass-panel border-white/5",
+    default: "relative",
+    glass: "relative",
   };
 
   return (
     <header
       className={cn(
-        "w-full px-6 py-4 flex items-center justify-between sticky top-0 z-50",
+        "w-full px-6 py-4 flex items-center justify-between z-50",
+        variant === "glass" && "sticky top-0",
         variants[variant],
       )}
     >
+      {variant === "default" ? (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0f2422]/90 via-[#0f2422]/60 to-transparent backdrop-blur-2xl -z-10" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0f2422]/60 via-[#0f2422]/30 to-transparent backdrop-blur-2xl -z-10" />
+      )}
+
       <Link to="/" className="flex items-center gap-3">
         <div className="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg border border-primary/20">
           <Icon name="share" size="sm" />
@@ -45,14 +59,21 @@ export function Header({
       </Link>
 
       {navItems.length > 0 && (
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden md:flex items-center gap-6">
           {navItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}
-              className="text-sm font-medium text-gray-400 hover:text-primary transition-colors"
+              className="group flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-400 hover:text-primary transition-all duration-500 ease-out"
             >
-              {item.label}
+              <Icon
+                name={navIconMap[item.label] || "circle"}
+                size="sm"
+                className="transition-all duration-500 ease-out group-hover:drop-shadow-[0_0_10px_rgba(0,255,230,0.8)]"
+              />
+              <span className="transition-all duration-500 ease-out group-hover:drop-shadow-[0_0_8px_rgba(0,255,230,0.6)]">
+                {item.label}
+              </span>
             </Link>
           ))}
         </nav>

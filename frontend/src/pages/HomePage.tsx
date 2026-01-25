@@ -47,7 +47,7 @@ export function HomePage() {
   return (
     <PageLayout
       headerVariant="default"
-      footerVariant="minimal"
+      footerVariant="default"
       className="flex flex-col"
     >
       <section className="flex-grow flex flex-col items-center justify-center w-full px-6 lg:px-12 py-12">

@@ -28,13 +28,13 @@ export function PageLayout({
   navItems,
 }: PageLayoutProps) {
   return (
-    <div className="min-h-screen flex flex-col bg-background-dark text-white overflow-hidden">
-      <div className="fixed inset-0 pointer-events-none z-50 bg-grain opacity-20 mix-blend-overlay overflow-hidden" />
+    <div className="min-h-screen overflow-x-hidden text-white bg-background-dark">
+      <div className="fixed inset-0 z-50 pointer-events-none bg-grain opacity-20 mix-blend-overlay" />
 
-      <div className="fixed inset-0 pointer-events-none z-0 bg-grid-pattern [mask-image:linear-gradient(to_bottom,white,transparent)] overflow-hidden" />
+      <div className="fixed inset-0 pointer-events-none z-0 bg-grid-pattern [mask-image:linear-gradient(to_bottom,white,transparent)]" />
 
       {backgroundEffects && (
-        <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="fixed inset-0 z-0 pointer-events-none">
           <div className="absolute top-0 left-0 w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[40%] h-[40%] rounded-full bg-accent-amber/5 blur-[120px]" />
         </div>
@@ -42,7 +42,7 @@ export function PageLayout({
 
       <Header variant={headerVariant} navItems={navItems} />
 
-      <main className={cn("flex-1 relative z-10 overflow-y-auto", className)}>{children}</main>
+      <main className={cn("relative z-10", className)}>{children}</main>
 
       {showFooter &&
         (footerVariant === "minimal" ? <MinimalFooter /> : <Footer />)}

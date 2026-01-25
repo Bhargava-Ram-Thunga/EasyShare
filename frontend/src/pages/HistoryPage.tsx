@@ -107,7 +107,15 @@ export function HistoryPage() {
     .reduce((acc, r) => acc + r.fileSize, 0);
 
   return (
-    <PageLayout headerVariant="default" footerVariant="default">
+    <PageLayout
+      headerVariant="glass"
+      footerVariant="default"
+      navItems={[
+        { to: "/", label: "Share" },
+        { to: "/receive", label: "Receive" },
+        { to: "/files", label: "Files" },
+      ]}
+    >
       <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-12">
         <div className="mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-3 tracking-tight">

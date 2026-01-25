@@ -22,15 +22,15 @@ export function SharePanel({
   onShowQR,
 }: SharePanelProps) {
   return (
-    <div className="lg:col-span-5 flex flex-col gap-6">
-      <Card variant="glow" className="flex flex-col gap-6 h-full">
+    <div className="lg:col-span-5 flex flex-col gap-3">
+      <Card variant="glow" className="flex flex-col gap-4 h-full">
         <ShareLinkCard
           shareLink={shareLink}
           onCopy={onCopyLink}
           onShowQR={onShowQR}
         />
 
-        <div className="h-px bg-border-dark w-full my-1" />
+        <div className="h-px bg-border-dark w-full" />
 
         <ConnectionStatus status={connectionStatus} />
       </Card>

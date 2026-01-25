@@ -64,7 +64,14 @@ export function FilesPage() {
   };
 
   return (
-    <PageLayout headerVariant="default" footerVariant="default">
+    <PageLayout
+      headerVariant="glass"
+      footerVariant="default"
+      navItems={[
+        { to: "/receive", label: "Receive" },
+        { to: "/history", label: "History" },
+      ]}
+    >
       <div className="w-full max-w-7xl mx-auto px-6 lg:px-12 py-12">
         <div className="mb-12">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-6">

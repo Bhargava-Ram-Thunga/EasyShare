@@ -46,13 +46,18 @@ export function SharePage() {
 
   return (
     <PageLayout
-      showFooter={false}
-      className="flex items-center justify-center p-4"
+      headerVariant="glass"
+      className="flex flex-col items-center justify-center py-4 px-4 min-h-[calc(100vh-140px)]"
+      navItems={[
+        { to: "/receive", label: "Receive" },
+        { to: "/files", label: "Files" },
+        { to: "/history", label: "History" },
+      ]}
     >
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-accent-amber/5 blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
+      <div className="relative z-10 grid w-full max-w-4xl grid-cols-1 gap-4 lg:grid-cols-12">
         <FileQueue
           files={files}
           onRemoveFile={handleRemoveFile}

@@ -21,19 +21,19 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
     if (value && index < 8) {
       inputRefs.current[index + 1]?.focus();
     }
-
-    // Auto-submit when all 9 digits are entered
-    if (index === 8 && value) {
-      const fullCode = newCode.join('');
-      if (fullCode.length === 9) {
-        setTimeout(() => onCodeSubmit(fullCode), 100);
-      }
-    }
   };
 
   const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
+    }
+
+    // Submit on Enter key if code is complete
+    if (e.key === 'Enter') {
+      const fullCode = code.join('');
+      if (fullCode.length === 9) {
+        onCodeSubmit(fullCode);
+      }
     }
   };
 
@@ -48,11 +48,11 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
       }
       setCode(newCode);
 
-      // Focus last filled input or submit if complete
-      if (pastedData.length === 9) {
-        setTimeout(() => onCodeSubmit(pastedData), 100);
-      } else {
+      // Focus last filled input
+      if (pastedData.length < 9) {
         inputRefs.current[pastedData.length]?.focus();
+      } else {
+        inputRefs.current[8]?.focus();
       }
     }
   };
@@ -66,12 +66,12 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
 
   return (
     <Card variant="glow" padding="lg">
-      <div className="flex flex-col items-center text-center mb-6">
-        <div className="size-14 bg-primary/10 rounded-xl flex items-center justify-center text-primary border border-primary/20 mb-4">
+      <div className="flex flex-col items-center mb-6 text-center">
+        <div className="flex items-center justify-center mb-4 border size-14 bg-primary/10 rounded-xl text-primary border-primary/20">
           <Icon name="key" size="lg" />
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">Enter Share Code</h2>
-        <p className="text-gray-400 text-sm">
+        <h2 className="mb-2 text-2xl font-bold text-white">Enter Share Code</h2>
+        <p className="text-sm text-gray-400">
           Enter the 9-digit code to receive files
         </p>
       </div>
@@ -90,7 +90,7 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
               className="size-11 md:size-12 text-center text-xl md:text-2xl font-mono font-bold bg-[#0f2422] border border-border-dark-alt rounded-lg text-primary focus:border-primary focus:ring-1 focus:ring-primary transition-all outline-none uppercase"
             />
             {(index === 2 || index === 5) && (
-              <span className="text-primary/50 text-2xl font-bold select-none px-1">
+              <span className="px-1 text-2xl font-bold select-none text-primary/50">
                 -
               </span>
             )}
@@ -110,12 +110,12 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
         Connect & Receive
       </Button>
 
-      <div className="mt-6 p-4 bg-border-dark/30 rounded-lg border border-border-dark-alt">
+      <div className="mt-6 rounded-lg p-4 bg-border-dark/30 border border-border-dark-alt">
         <div className="flex items-start gap-3">
           <Icon name="info" className="text-primary/60 mt-0.5 shrink-0" size="sm" />
-          <div className="text-xs text-gray-400 leading-relaxed">
-            <p className="font-medium text-gray-300 mb-1">How it works:</p>
-            <ul className="space-y-1 ml-3 list-disc">
+          <div className="text-xs leading-relaxed text-gray-400">
+            <p className="mb-1 font-medium text-gray-300">How it works:</p>
+            <ul className="ml-3 space-y-1 list-disc">
               <li>Get the code from sender</li>
               <li>Enter to establish P2P connection</li>
               <li>Direct transfer - no server storage</li>

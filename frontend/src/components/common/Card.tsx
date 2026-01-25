@@ -17,7 +17,7 @@ export function Card({
   const variants = {
     default: "bg-surface-dark border-border-dark",
     glass: "glass-panel",
-    glow: "bg-surface-dark border-border-dark border-glow shadow-glow hover:shadow-glow-strong transition-shadow",
+    glow: "bg-surface-dark border border-white/5 shadow-glow hover:shadow-glow-strong transition-all duration-500",
   };
 
   const paddings = {

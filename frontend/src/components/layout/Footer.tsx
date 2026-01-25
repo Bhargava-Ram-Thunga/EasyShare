@@ -3,25 +3,31 @@ import { Icon } from "../common";
 
 export function Footer() {
   return (
-    <footer className="w-full border-t border-primary/5 bg-background-dark/80 px-6 lg:px-10 py-6">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
+    <footer className="w-full border-t border-white/5 bg-background-dark/80">
+      <div className="flex flex-col items-center justify-between gap-4 px-6 py-6 mx-auto md:flex-row max-w-7xl">
+        <div className="flex items-center gap-2 transition-opacity opacity-50 hover:opacity-100">
           <Icon name="share" className="text-primary" size="sm" />
-          <span className="text-white font-bold tracking-tight">
+          <span className="text-sm font-bold tracking-tight text-white">
             Easy Share
           </span>
         </div>
 
-        <div className="flex items-center gap-6 md:gap-8">
+        <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
+          <Link
+            to="/docs"
+            className="text-gray-400 transition-colors hover:text-white"
+          >
+            Documentation
+          </Link>
           <Link
             to="/privacy"
-            className="text-gray-500 hover:text-white text-xs font-medium transition-colors"
+            className="text-gray-400 transition-colors hover:text-white"
           >
             Privacy Policy
           </Link>
           <Link
             to="/terms"
-            className="text-gray-500 hover:text-white text-xs font-medium transition-colors"
+            className="text-gray-400 transition-colors hover:text-white"
           >
             Terms of Service
           </Link>
@@ -29,13 +35,13 @@ export function Footer() {
             href="https://github.com/Bhargava-Ram-Thunga/EasyShare"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-gray-500 hover:text-white text-xs font-medium transition-colors"
+            className="text-gray-400 transition-colors hover:text-white"
           >
-            Github
+            GitHub
           </a>
         </div>
 
-        <div className="text-gray-600 text-sm">
+        <div className="text-sm text-gray-500">
           © {new Date().getFullYear()} Easy Share Inc.
         </div>
       </div>
@@ -45,31 +51,36 @@ export function Footer() {
 
 export function MinimalFooter() {
   return (
-    <footer className="w-full border-t border-white/5 bg-background-dark py-12 px-6 lg:px-12">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
+    <footer className="w-full border-t border-white/5 bg-background-dark">
+      <div className="flex flex-col items-center justify-between gap-6 px-6 py-8 mx-auto md:flex-row lg:px-12 max-w-7xl">
+        <div className="flex items-center gap-2 transition-opacity opacity-50 hover:opacity-100">
           <Icon name="share" className="text-primary" size="sm" />
-          <span className="text-white font-bold tracking-tight">
+          <span className="font-bold tracking-tight text-white">
             Easy Share
           </span>
         </div>
-        <div className="flex items-center gap-8 text-sm text-gray-500">
-          <Link to="/privacy" className="hover:text-white transition-colors">
+
+        <div className="flex flex-wrap items-center justify-center gap-8 text-sm">
+          <Link to="/docs" className="text-gray-400 transition-colors hover:text-white">
+            Documentation
+          </Link>
+          <Link to="/privacy" className="text-gray-400 transition-colors hover:text-white">
             Privacy Policy
           </Link>
-          <Link to="/terms" className="hover:text-white transition-colors">
+          <Link to="/terms" className="text-gray-400 transition-colors hover:text-white">
             Terms of Service
           </Link>
           <a
             href="https://github.com/Bhargava-Ram-Thunga/EasyShare"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white transition-colors"
+            className="text-gray-400 transition-colors hover:text-white"
           >
-            Github
+            GitHub
           </a>
         </div>
-        <div className="text-gray-600 text-sm">
+
+        <div className="text-sm text-gray-500">
           © {new Date().getFullYear()} Easy Share Inc.
         </div>
       </div>

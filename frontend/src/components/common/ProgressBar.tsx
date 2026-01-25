@@ -29,25 +29,18 @@ export function ProgressBar({
     <div className={cn("w-full", className)}>
       <div
         className={cn(
-          "w-full bg-black/50 rounded-full border border-white/10 p-[2px] relative overflow-hidden",
+          "w-full bg-black/50 rounded-full border border-white/10 relative overflow-hidden",
           sizes[size],
         )}
       >
         <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(-45deg, transparent, transparent 5px, #ffffff 5px, #ffffff 10px)",
-          }}
-        />
-        <div
           className={cn(
-            "h-full rounded-full bg-gradient-to-r from-teal-600 via-primary to-primary relative shadow-[0_0_15px_rgba(0,255,230,0.5)] transition-all duration-300 ease-out",
+            "h-full rounded-full bg-gradient-to-r from-teal-600 via-primary to-primary relative shadow-[0_0_12px_rgba(0,255,230,0.4)] transition-all duration-300 ease-out",
             animated && "transition-[width]",
           )}
           style={{ width: `${percentage}%` }}
         >
-          <div className="absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-r from-transparent to-white/40" />
+          <div className="absolute top-0 right-0 bottom-0 w-8 bg-gradient-to-r from-transparent to-white/30 rounded-full" />
         </div>
       </div>
       {showValue && (
