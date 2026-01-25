@@ -3,14 +3,14 @@ export function MarqueeBanner() {
     "NO LOGS • END-TO-END ENCRYPTION • OPEN SOURCE • NO LOGS • END-TO-END ENCRYPTION • OPEN SOURCE • NO LOGS • END-TO-END ENCRYPTION • OPEN SOURCE • NO LOGS • END-TO-END ENCRYPTION • OPEN SOURCE • NO LOGS • END-TO-END ENCRYPTION • OPEN SOURCE • ";
 
   return (
-    <div className="w-full bg-primary py-3 overflow-hidden border-t border-b border-black">
+    <div className="w-full py-3 overflow-hidden border-t border-b border-black bg-primary">
       <div className="marquee-container">
-        <div className="marquee-content font-mono font-bold text-black uppercase tracking-wider text-sm">
+        <div className="font-mono text-sm font-bold tracking-wider text-black uppercase marquee-content">
           {content}
         </div>
         <div
           aria-hidden="true"
-          className="marquee-content font-mono font-bold text-black uppercase tracking-wider text-sm"
+          className="font-mono text-sm font-bold tracking-wider text-black uppercase marquee-content"
         >
           {content}
         </div>

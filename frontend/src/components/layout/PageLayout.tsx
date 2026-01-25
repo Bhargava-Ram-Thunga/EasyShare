@@ -28,7 +28,7 @@ export function PageLayout({
   navItems,
 }: PageLayoutProps) {
   return (
-    <div className="min-h-screen overflow-x-hidden text-white bg-background-dark">
+    <div className="flex flex-col min-h-screen overflow-x-hidden text-white bg-background-dark">
       <div className="fixed inset-0 z-50 pointer-events-none bg-grain opacity-20 mix-blend-overlay" />
 
       <div className="fixed inset-0 pointer-events-none z-0 bg-grid-pattern [mask-image:linear-gradient(to_bottom,white,transparent)]" />
@@ -42,7 +42,7 @@ export function PageLayout({
 
       <Header variant={headerVariant} navItems={navItems} />
 
-      <main className={cn("relative z-10", className)}>{children}</main>
+      <main className={cn("relative z-10 flex-1 flex flex-col", className)}>{children}</main>
 
       {showFooter &&
         (footerVariant === "minimal" ? <MinimalFooter /> : <Footer />)}
