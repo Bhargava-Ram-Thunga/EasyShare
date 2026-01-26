@@ -169,13 +169,13 @@ export function DocsPage() {
                           {sIndex + 1}
                         </div>
                         <div className="flex-1">
-                          {step.text && (
+                          {'text' in step && step.text && (
                             <p className="text-gray-300 leading-relaxed mt-0.5">{step.text}</p>
                           )}
-                          {step.title && (
+                          {'title' in step && step.title && (
                             <p className="text-gray-300 font-medium mb-2">{step.title}</p>
                           )}
-                          {step.code && (
+                          {'code' in step && step.code && (
                             <pre className="bg-surface-darker p-4 rounded-lg border border-white/10 overflow-x-auto mt-2">
                               <code className="text-primary text-sm font-mono">{step.code}</code>
                             </pre>

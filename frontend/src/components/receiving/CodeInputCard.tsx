@@ -78,9 +78,8 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
 
       <div className="flex items-center justify-center gap-2 mb-6" onPaste={handlePaste}>
         {code.map((digit, index) => (
-          <>
+          <div key={index} className="flex items-center gap-2">
             <input
-              key={index}
               ref={(el) => { inputRefs.current[index] = el; }}
               type="text"
               maxLength={1}
@@ -94,7 +93,7 @@ export function CodeInputCard({ onCodeSubmit }: CodeInputCardProps) {
                 -
               </span>
             )}
-          </>
+          </div>
         ))}
       </div>
 

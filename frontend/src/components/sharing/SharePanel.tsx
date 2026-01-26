@@ -10,6 +10,7 @@ interface SharePanelProps {
     | "connecting"
     | "connected"
     | "transferring"
+    | "completed"
     | "error";
   onCopyLink?: () => void;
   onShowQR?: () => void;

@@ -1,65 +1,186 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageLayout } from '../components/layout';
 import { Card, Icon, Badge, Button } from '../components/common';
 import { formatFileSize, getFileIcon, getFileTypeLabel } from '../lib/utils';
-
-interface FileRecord {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  uploadedAt: Date;
-  shareLink?: string;
-  downloads: number;
-  status: 'active' | 'expired' | 'deleted';
-}
-
-const mockFiles: FileRecord[] = [
-  {
-    id: '1',
-    name: 'Project Presentation.pdf',
-    size: 2457600,
-    type: 'application/pdf',
-    uploadedAt: new Date(2026, 0, 23),
-    shareLink: 'https://easyshare.app/d/abc123',
-    downloads: 5,
-    status: 'active',
-  },
-  {
-    id: '2',
-    name: 'vacation-photos.zip',
-    size: 45678900,
-    type: 'application/zip',
-    uploadedAt: new Date(2026, 0, 22),
-    shareLink: 'https://easyshare.app/d/xyz789',
-    downloads: 2,
-    status: 'active',
-  },
-  {
-    id: '3',
-    name: 'demo-video.mp4',
-    size: 12345678,
-    type: 'video/mp4',
-    uploadedAt: new Date(2026, 0, 20),
-    downloads: 12,
-    status: 'expired',
-  },
-];
+import { apiService } from '../services/api';
+import type { FileRecord } from '../services/api';
 
 export function FilesPage() {
-  const [files] = useState<FileRecord[]>(mockFiles);
-  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
+  const navigate = useNavigate();
+  const [files, setFiles] = useState<FileRecord[]>([]);
+  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('active'); // Default to active tab
+  const [loading, setLoading] = useState(true);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
-  const filteredFiles = files.filter((file) => {
-    if (filter === 'all') return true;
-    return file.status === filter;
-  });
+  useEffect(() => {
+    setLoading(true);
+    const statusFilter = filter === 'all' ? undefined : filter;
+    console.log('Fetching files with filter:', filter, 'statusFilter:', statusFilter);
+
+    // Clear selection when filter changes
+    setSelectedFiles(new Set());
+    setSelectionMode(false);
+
+    apiService
+      .getFiles(50, 0, statusFilter)
+      .then((fetchedFiles) => {
+        console.log('Fetched files:', fetchedFiles.length, 'files for filter:', filter);
+        setFiles(fetchedFiles);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch files:', err);
+        setFiles([]);
+      })
+      .finally(() => setLoading(false));
+  }, [filter]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredFiles = files;
 
   const handleCopyLink = async (link: string) => {
     try {
       await navigator.clipboard.writeText(link);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const handleShareAgain = async (file: FileRecord) => {
+    try {
+      // Create file metadata array for the share
+      const fileItems = [{
+        id: file.id,
+        name: file.name,
+        size: file.size,
+        type: file.type
+      }];
+
+      // Create a new share with the same file
+      const shareResponse = await apiService.createShare(fileItems);
+
+      // Navigate to share page with the new share code AND file metadata
+      navigate('/share', {
+        state: {
+          files: fileItems, // Pass file metadata so FileQueue can display them
+          shareData: shareResponse
+        }
+      });
+    } catch (err) {
+      console.error('Failed to create new share:', err);
+      alert('Failed to create new share. Please try again.');
+    }
+    setOpenDropdown(null);
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    const isHardDelete = filter === 'expired';
+    const confirmMessage = isHardDelete
+      ? 'Are you sure you want to permanently delete this file? This cannot be undone.'
+      : 'Are you sure you want to delete this file?';
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await apiService.deleteFile(fileId, isHardDelete);
+      console.log(`File ${isHardDelete ? 'permanently deleted' : 'marked as expired'}:`, fileId);
+
+      // Refresh the entire file list from the server to get updated statuses
+      setLoading(true);
+      const statusFilter = filter === 'all' ? undefined : filter;
+      const fetchedFiles = await apiService.getFiles(50, 0, statusFilter);
+      setFiles(fetchedFiles);
+      setLoading(false);
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+      alert('Failed to delete file. Please try again.');
+      setLoading(false);
+    }
+    setOpenDropdown(null);
+  };
+
+  const toggleDropdown = (fileId: string) => {
+    setOpenDropdown(openDropdown === fileId ? null : fileId);
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedFiles(new Set());
+  };
+
+  const toggleFileSelection = (fileId: string) => {
+    setSelectedFiles(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
+      } else {
+        newSet.add(fileId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedFiles.size === files.length) {
+      setSelectedFiles(new Set());
+    } else {
+      setSelectedFiles(new Set(files.map(f => f.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedFiles.size === 0) {
+      return;
+    }
+
+    const isHardDelete = filter === 'expired';
+    const confirmMessage = isHardDelete
+      ? `Are you sure you want to permanently delete ${selectedFiles.size} file(s)? This cannot be undone.`
+      : `Are you sure you want to delete ${selectedFiles.size} file(s)?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Delete all selected files
+      await Promise.all(
+        Array.from(selectedFiles).map(fileId => apiService.deleteFile(fileId, isHardDelete))
+      );
+
+      console.log(`Successfully ${isHardDelete ? 'permanently deleted' : 'marked as expired'} ${selectedFiles.size} file(s)`);
+
+      // Refresh the file list
+      const statusFilter = filter === 'all' ? undefined : filter;
+      const fetchedFiles = await apiService.getFiles(50, 0, statusFilter);
+      setFiles(fetchedFiles);
+
+      // Exit selection mode
+      setSelectionMode(false);
+      setSelectedFiles(new Set());
+    } catch (err) {
+      console.error('Failed to delete files:', err);
+      alert('Failed to delete some files. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,51 +204,101 @@ export function FilesPage() {
                 Manage and track all your shared files in one place
               </p>
             </div>
-            <Button
-              variant="primary"
-              size="lg"
-              icon="add"
-              onClick={() => (window.location.href = '/')}
-            >
-              Share New File
-            </Button>
+            <div className="flex gap-3">
+              {selectionMode ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    icon="close"
+                    onClick={toggleSelectionMode}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    icon="delete"
+                    onClick={handleBulkDelete}
+                    disabled={selectedFiles.size === 0}
+                  >
+                    Delete Selected ({selectedFiles.size})
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {files.length > 0 && (
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      icon="delete_sweep"
+                      onClick={toggleSelectionMode}
+                    >
+                      Clear Files
+                    </Button>
+                  )}
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    icon="add"
+                    onClick={() => (window.location.href = '/')}
+                  >
+                    Share New File
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                filter === 'all'
-                  ? 'bg-primary text-background-dark'
-                  : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
-              }`}
-            >
-              All Files
-            </button>
-            <button
-              onClick={() => setFilter('active')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                filter === 'active'
-                  ? 'bg-primary text-background-dark'
-                  : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
-              }`}
-            >
-              Active
-            </button>
-            <button
-              onClick={() => setFilter('expired')}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                filter === 'expired'
-                  ? 'bg-primary text-background-dark'
-                  : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
-              }`}
-            >
-              Expired
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="flex gap-3">
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  filter === 'all'
+                    ? 'bg-primary text-background-dark'
+                    : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
+                }`}
+              >
+                All Files
+              </button>
+              <button
+                onClick={() => setFilter('active')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  filter === 'active'
+                    ? 'bg-primary text-background-dark'
+                    : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
+                }`}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setFilter('expired')}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  filter === 'expired'
+                    ? 'bg-primary text-background-dark'
+                    : 'bg-surface-dark text-gray-400 hover:text-white border border-border-dark'
+                }`}
+              >
+                Expired
+              </button>
+            </div>
+            {selectionMode && files.length > 0 && (
+              <button
+                onClick={toggleSelectAll}
+                className="px-4 py-2 rounded-lg text-sm font-bold bg-surface-dark text-gray-400 hover:text-white border border-border-dark transition-all"
+              >
+                {selectedFiles.size === files.length ? 'Deselect All' : 'Select All'}
+              </button>
+            )}
           </div>
         </div>
 
-        {filteredFiles.length === 0 ? (
+        {loading ? (
+          <div className="p-8 text-center">
+            <p className="text-gray-400">Loading files...</p>
+          </div>
+        ) : filteredFiles.length === 0 ? (
           <Card className="text-center py-20">
             <Icon
               name="folder_open"
@@ -175,26 +346,68 @@ export function FilesPage() {
                       </div>
                       <p className="text-sm text-gray-400 font-mono">
                         {formatFileSize(file.size)} • {getFileTypeLabel(file.type)} •{' '}
-                        {file.uploadedAt.toLocaleDateString()} • {file.downloads}{' '}
+                        {new Date(file.uploaded_at).toLocaleDateString()} • {file.downloads}{' '}
                         download{file.downloads !== 1 ? 's' : ''}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {file.shareLink && file.status === 'active' && (
-                      <Button
-                        variant="outline"
-                        size="md"
-                        icon="content_copy"
-                        onClick={() => handleCopyLink(file.shareLink!)}
+                    {selectionMode ? (
+                      <button
+                        onClick={() => toggleFileSelection(file.id)}
+                        className="size-10 flex items-center justify-center rounded-lg border-2 transition-all"
+                        style={{
+                          borderColor: selectedFiles.has(file.id) ? '#3b82f6' : '#374151',
+                          backgroundColor: selectedFiles.has(file.id) ? '#3b82f6' : 'transparent',
+                        }}
                       >
-                        Copy Link
-                      </Button>
+                        {selectedFiles.has(file.id) && (
+                          <Icon name="check" size="md" className="text-white" />
+                        )}
+                      </button>
+                    ) : (
+                      <>
+                        {file.share_link && file.status === 'active' && (
+                          <Button
+                            variant="outline"
+                            size="md"
+                            icon="content_copy"
+                            onClick={() => handleCopyLink(file.share_link!)}
+                          >
+                            Copy Link
+                          </Button>
+                        )}
+                        <div className="relative" ref={openDropdown === file.id ? dropdownRef : null}>
+                          <button
+                            onClick={() => toggleDropdown(file.id)}
+                            className="size-10 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors"
+                          >
+                            <Icon name="more_vert" size="md" />
+                          </button>
+
+                          {openDropdown === file.id && (
+                            <div className="absolute right-0 mt-2 w-48 bg-surface-dark border border-border-dark-alt rounded-lg shadow-xl z-50 overflow-hidden">
+                              <button
+                                onClick={() => handleShareAgain(file)}
+                                className="w-full px-4 py-3 text-left text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors flex items-center gap-3"
+                              >
+                                <Icon name="share" size="sm" />
+                                Share Again
+                              </button>
+                              <div className="h-px bg-border-dark-alt" />
+                              <button
+                                onClick={() => handleDeleteFile(file.id)}
+                                className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors flex items-center gap-3"
+                              >
+                                <Icon name="delete" size="sm" />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </>
                     )}
-                    <button className="size-10 flex items-center justify-center rounded-lg hover:bg-white/5 text-gray-400 hover:text-white transition-colors">
-                      <Icon name="more_vert" size="md" />
-                    </button>
                   </div>
                 </div>
               </Card>

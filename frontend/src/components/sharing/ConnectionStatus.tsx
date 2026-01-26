@@ -5,6 +5,7 @@ type ConnectionState =
   | "connecting"
   | "connected"
   | "transferring"
+  | "completed"
   | "error";
 
 interface ConnectionStatusProps {
@@ -45,6 +46,14 @@ const statusConfig = {
     defaultMessage: "Transfer in progress...",
     defaultSubMessage: "Keep this tab open",
     showSpinner: true,
+  },
+  completed: {
+    label: "Complete",
+    labelColor: "text-green-400",
+    icon: "check_circle",
+    defaultMessage: "Transfer complete!",
+    defaultSubMessage: "All files sent successfully",
+    showSpinner: false,
   },
   error: {
     label: "Error",
