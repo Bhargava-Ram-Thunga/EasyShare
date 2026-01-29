@@ -49,31 +49,39 @@ export function ReceivePage() {
 
   // Fetch share details when code is entered
   useEffect(() => {
-    if (!enteredCode) {
-      setShareDetails(null);
-      setLoading(false);
-      return;
-    }
-
-    const fetchShareDetails = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const details = await apiService.getShareDetails(enteredCode);
-        setShareDetails(details);
-      } catch (err) {
-        console.error("Failed to get share details:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to validate share code"
-        );
-        setEnteredCode(null);
-      } finally {
+    try {
+      if (!enteredCode) {
+        setShareDetails(null);
         setLoading(false);
+        return;
       }
-    };
 
-    fetchShareDetails();
+      // Cleanup if enteredCode changes (e.g. user goes back/forward)
+      cleanupConnections();
+
+      const fetchShareDetails = async () => {
+        setLoading(true);
+        setError(null);
+
+        try {
+          const details = await apiService.getShareDetails(enteredCode);
+          setShareDetails(details);
+        } catch (err) {
+          console.error("Failed to get share details:", err);
+          setError(
+            err instanceof Error ? err.message : "Failed to validate share code"
+          );
+          setEnteredCode(null);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchShareDetails();
+    } catch (error) {
+      console.error("Error in receive effect:", error);
+      setLoading(false);
+    }
   }, [enteredCode]);
 
   const handleCodeSubmit = useCallback((code: string) => {
@@ -88,15 +96,46 @@ export function ReceivePage() {
       const newPausedState = !prev;
       console.log(newPausedState ? "Transfer paused" : "Transfer resumed");
 
-      // TODO: When WebRTC is implemented, pause/resume data channel here
-      // For now, just toggle the UI state
+      if (webrtcRef.current) {
+        if (newPausedState) {
+          webrtcRef.current.pause();
+        } else {
+          webrtcRef.current.resume();
+        }
+      }
 
       return newPausedState;
     });
   }, []);
 
+  const cleanupConnections = () => {
+    if (webrtcRef.current) {
+      webrtcRef.current.close();
+      webrtcRef.current = null;
+    }
+    
+    if (signalingClientRef.current) {
+      signalingClientRef.current.disconnect();
+      signalingClientRef.current = null;
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupConnections();
+    };
+  }, []);
+
   const handleCancel = useCallback(() => {
     console.log("Transfer cancelled");
+    
+    if (webrtcRef.current) {
+        webrtcRef.current.sendControl('cancel');
+    }
+    
+    cleanupConnections();
+
     setEnteredCode(null);
     setShareDetails(null);
     setShowFileSelection(true);
@@ -109,11 +148,15 @@ export function ReceivePage() {
     setSelectedFilesToDownload(files);
     setShowFileSelection(false);
     setCurrentDownloadIndex(0);
+    setIsPaused(false); // Ensure pause state is reset
 
     if (!shareDetails || !enteredCode) return;
 
     try {
       // Initialize signaling client - use session_id to join same session as sender
+      // Ensure any previous connections are closed
+      cleanupConnections();
+
       const client = new SignalingClient(
         `receiver-${Date.now()}`,
         shareDetails.session_id
@@ -181,6 +224,7 @@ export function ReceivePage() {
           if (newDownloadIndex >= files.length) {
             console.log("All files downloaded!");
             setDownloadComplete(true);
+            cleanupConnections();
           }
         }
 

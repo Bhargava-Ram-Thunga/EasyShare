@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { PageLayout } from "../components/layout";
 import { FileQueue, type FileItem } from "../components/fileManagement";
 import { SharePanel } from "../components/sharing";
+import { type ConnectedPeer } from "../components/sharing/ConnectionStatus";
 import type { ShareCreateResponse } from "../services/api";
 import { apiService } from "../services/api";
 import { SignalingClient, type SignalingMessage } from "../services/websocket";
@@ -39,6 +40,8 @@ export function SharePage() {
   const [connectionStatus, setConnectionStatus] = useState<
     "waiting" | "connecting" | "connected" | "transferring" | "completed" | "error"
   >("waiting");
+  
+  const [connectedPeers, setConnectedPeers] = useState<ConnectedPeer[]>([]);
 
   // Extract actual File objects once on mount
   useEffect(() => {
@@ -53,12 +56,36 @@ export function SharePage() {
   }, []);
 
   const signalingClientRef = useRef<SignalingClient | null>(null);
-  const webrtcRef = useRef<WebRTCFileTransfer | null>(null);
+  // Store multiple peer connections mapped by peerId
+  const webrtcConnectionsRef = useRef<Map<string, WebRTCFileTransfer>>(new Map());
   const remotePeerIdRef = useRef<string | null>(null);
+
+  const cleanupConnections = () => {
+    // Close all WebRTC connections
+    webrtcConnectionsRef.current.forEach((conn) => {
+        try { conn.close(); } catch (e) { /* ignore */ }
+    });
+    webrtcConnectionsRef.current.clear();
+
+    if (signalingClientRef.current) {
+      signalingClientRef.current.disconnect();
+      signalingClientRef.current = null;
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupConnections();
+    };
+  }, []);
 
   // Initialize WebSocket signaling and WebRTC
   useEffect(() => {
     if (!shareData) return;
+
+    // Ensure any previous connections are closed
+    cleanupConnections();
 
     const client = new SignalingClient(
       shareData.peer_id,
@@ -66,47 +93,8 @@ export function SharePage() {
     );
     signalingClientRef.current = client;
 
-    // Initialize WebRTC as sender
-    const webrtc = new WebRTCFileTransfer(true);
-    webrtcRef.current = webrtc;
-
-    webrtc.initialize().then(() => {
-      console.log("WebRTC initialized as sender");
-    });
-
-    // Store ICE candidates until we have a remote peer
-    const pendingIceCandidates: RTCIceCandidate[] = [];
-
-    // Handle ICE candidates
-    webrtc.onIceCandidate = (candidate) => {
-      console.log("Sender ICE candidate generated:", candidate.candidate?.substring(0, 50));
-      if (remotePeerIdRef.current && client.isConnected()) {
-        console.log("Sending ICE candidate to:", remotePeerIdRef.current);
-        client.send({
-          type: "ice_candidate",
-          target_peer_id: remotePeerIdRef.current,
-          candidate: candidate.toJSON(),
-        });
-      } else {
-        console.log("Queuing ICE candidate - remote peer:", remotePeerIdRef.current, "connected:", client.isConnected());
-        pendingIceCandidates.push(candidate);
-      }
-    };
-
-    // Function to send queued ICE candidates
-    const sendPendingCandidates = () => {
-      if (pendingIceCandidates.length > 0 && remotePeerIdRef.current) {
-        console.log(`Sending ${pendingIceCandidates.length} queued ICE candidates`);
-        pendingIceCandidates.forEach(candidate => {
-          client.send({
-            type: "ice_candidate",
-            target_peer_id: remotePeerIdRef.current!,
-            candidate: candidate.toJSON(),
-          });
-        });
-        pendingIceCandidates.length = 0;
-      }
-    };
+    // Note: We don't initialize a default WebRTC instance anymore.
+    // Instances are created on-demand when peers join.
 
     client
       .connect()
@@ -123,90 +111,138 @@ export function SharePage() {
     const cleanup = client.onMessage(async (message: SignalingMessage) => {
       if (message.type === "peer_joined") {
         console.log("Peer joined:", message.peer_id);
-        remotePeerIdRef.current = message.peer_id;
-        setConnectionStatus("connecting");
+        
+        // Add new peer to list
+        setConnectedPeers(prev => {
+            if (prev.find(p => p.id === message.peer_id)) return prev;
+            return [...prev, { id: message.peer_id, name: `Device ${prev.length + 1}`, status: 'downloading', progress: 0 }];
+        });
 
-        // Send any queued ICE candidates now that we have a remote peer
-        sendPendingCandidates();
+        // Create NEW WebRTC instance for this specific peer
+        if (webrtcConnectionsRef.current.has(message.peer_id)) {
+            try { webrtcConnectionsRef.current.get(message.peer_id)?.close(); } catch (e) { /* ignore */ }
+        }
+        
+        const newWebRTC = new WebRTCFileTransfer(true);
+        webrtcConnectionsRef.current.set(message.peer_id, newWebRTC);
+        
+        await newWebRTC.initialize();
+        console.log(`WebRTC initialized for peer ${message.peer_id}`);
+
+        // Re-attach ICE candidate listener to new instance
+        newWebRTC.onIceCandidate = (candidate) => {
+            if (client.isConnected()) {
+                client.send({
+                    type: "ice_candidate",
+                    target_peer_id: message.peer_id, // Send only to this peer
+                    candidate: candidate.toJSON(),
+                });
+            }
+        };
+        
+        // Re-attach progress listener
+        newWebRTC.onPeerProgress((report) => {
+            setConnectedPeers(prev => {
+                return prev.map(p => p.id === message.peer_id ? { 
+                    ...p, 
+                    status: report.status, 
+                    progress: report.progress,
+                    speed: report.speed,
+                    timeRemaining: report.timeRemaining
+                } : p);
+            });
+            
+            // Check global status
+            if (report.status === 'downloading') {
+                setConnectionStatus('transferring');
+            }
+        });
 
         // Create and send offer
         try {
-          const offer = await webrtc.createOffer();
+          const offer = await newWebRTC.createOffer();
           client.send({
             type: "offer",
             target_peer_id: message.peer_id,
             sdp: offer,
           });
-          console.log("Sent WebRTC offer");
-
-          // Send any ICE candidates generated during offer creation
-          sendPendingCandidates();
+          console.log(`Sent WebRTC offer to ${message.peer_id}`);
         } catch (error) {
           console.error("Failed to create offer:", error);
           setConnectionStatus("error");
         }
       } else if (message.type === "peer_left") {
         console.log("Peer left:", message.peer_id);
-        remotePeerIdRef.current = null;
-        setConnectionStatus("waiting");
-      } else if (message.type === "answer" && message.sdp) {
-        console.log("Received WebRTC answer from:", message.from_peer_id);
-        try {
-          await webrtc.setRemoteDescription(message.sdp);
-          console.log("Remote description set, connection should establish");
-
-          // Send any remaining queued ICE candidates
-          sendPendingCandidates();
-
-          setConnectionStatus("connected");
-
-          // Start sending files
-          if (actualFilesRef.current.length > 0) {
-            setConnectionStatus("transferring");
-            for (const file of actualFilesRef.current) {
-              console.log("Sending file:", file.name);
-              const startTime = Date.now();
-              await webrtc.sendFile(file);
-              const endTime = Date.now();
-              const durationSeconds = Math.floor((endTime - startTime) / 1000);
-
-              // Create transfer history record
-              try {
-                await apiService.createTransferHistory({
-                  share_id: shareData.share_id,
-                  transfer_type: "sent",
-                  file_name: file.name,
-                  file_size: file.size,
-                  peer_info: remotePeerIdRef.current || "Unknown",
-                  status: "completed",
-                  duration_seconds: durationSeconds,
-                });
-                console.log("Transfer history recorded for:", file.name);
-              } catch (error) {
-                console.error("Failed to record transfer history:", error);
-              }
-            }
-            console.log("All files sent!");
-            setConnectionStatus("completed");
-          }
-        } catch (error) {
-          console.error("Failed to set remote description:", error);
-          setConnectionStatus("error");
+        
+        // Clean up specific connection
+        if (webrtcConnectionsRef.current.has(message.peer_id)) {
+            try { webrtcConnectionsRef.current.get(message.peer_id)?.close(); } catch (e) { /* ignore */ }
+            webrtcConnectionsRef.current.delete(message.peer_id);
         }
-      } else if (message.type === "ice_candidate" && message.candidate) {
-        console.log("Received ICE candidate");
-        try {
-          await webrtc.addIceCandidate(message.candidate);
-        } catch (error) {
-          console.error("Failed to add ICE candidate:", error);
+
+        // Remove peer from list
+        setConnectedPeers(prev => prev.filter(p => p.id !== message.peer_id));
+        
+        if (webrtcConnectionsRef.current.size === 0) {
+            setConnectionStatus("waiting");
+        }
+        
+      } else if (message.type === "answer" && message.sdp && message.from_peer_id) {
+        console.log("Received WebRTC answer from:", message.from_peer_id);
+        const peerConnection = webrtcConnectionsRef.current.get(message.from_peer_id);
+        
+        if (peerConnection) {
+            try {
+                await peerConnection.setRemoteDescription(message.sdp);
+                console.log("Remote description set for", message.from_peer_id);
+
+                setConnectionStatus("connected");
+
+                // Start sending files TO THIS PEER
+                if (actualFilesRef.current.length > 0) {
+                    setConnectionStatus("transferring");
+                    // Run transfer in background
+                    (async () => {
+                        for (const file of actualFilesRef.current) {
+                            console.log(`Sending file ${file.name} to ${message.from_peer_id}`);
+                            try {
+                                await peerConnection.sendFile(file);
+                                
+                                await apiService.createTransferHistory({
+                                    share_id: shareData.share_id,
+                                    transfer_type: "sent",
+                                    file_name: file.name,
+                                    file_size: file.size,
+                                    peer_info: message.from_peer_id || "Unknown",
+                                    status: "completed",
+                                });
+                            } catch (e) {
+                                console.error("Error sending file:", e);
+                            }
+                        }
+                        console.log(`All files sent to ${message.from_peer_id}`);
+                    })();
+                }
+            } catch (error) {
+                console.error("Failed to set remote description:", error);
+            }
+        }
+      } else if (message.type === "ice_candidate" && message.candidate && message.from_peer_id) {
+        console.log("Received ICE candidate from", message.from_peer_id);
+        const peerConnection = webrtcConnectionsRef.current.get(message.from_peer_id);
+        if (peerConnection) {
+            try {
+                await peerConnection.addIceCandidate(message.candidate);
+            } catch (error) {
+                console.error("Failed to add ICE candidate:", error);
+            }
         }
       }
     });
 
     return () => {
       cleanup();
-      client.disconnect();
-      webrtc.close();
+      cleanupConnections();
     };
   }, [shareData]);
 
@@ -269,7 +305,11 @@ export function SharePage() {
           onAddMore={handleAddMore}
         />
 
-        <SharePanel shareLink={shareCode} connectionStatus={connectionStatus} />
+        <SharePanel 
+            shareLink={shareCode} 
+            connectionStatus={connectionStatus} 
+            peers={connectedPeers} 
+        />
       </div>
     </PageLayout>
   );

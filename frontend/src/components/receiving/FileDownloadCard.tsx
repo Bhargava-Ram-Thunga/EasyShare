@@ -69,7 +69,7 @@ export function FileDownloadCard({
         <div className="flex flex-col gap-1.5">
           <div className="flex justify-between items-end">
             <span className="text-primary text-xl font-bold font-mono">
-              {progress}
+              {progress.toFixed(1)}
               <span className="text-sm text-primary/60">%</span>
             </span>
             <div className="flex flex-col items-end text-right">

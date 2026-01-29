@@ -1,6 +1,6 @@
 import { Card } from "../common";
 import { ShareLinkCard } from "./ShareLinkCard";
-import { ConnectionStatus } from "./ConnectionStatus";
+import { ConnectionStatus, type ConnectedPeer } from "./ConnectionStatus";
 import { InfoTip } from "./InfoTip";
 
 interface SharePanelProps {
@@ -12,6 +12,7 @@ interface SharePanelProps {
     | "transferring"
     | "completed"
     | "error";
+  peers?: ConnectedPeer[];
   onCopyLink?: () => void;
   onShowQR?: () => void;
 }
@@ -19,6 +20,7 @@ interface SharePanelProps {
 export function SharePanel({
   shareLink,
   connectionStatus,
+  peers = [],
   onCopyLink,
   onShowQR,
 }: SharePanelProps) {
@@ -33,7 +35,7 @@ export function SharePanel({
 
         <div className="h-px bg-border-dark w-full" />
 
-        <ConnectionStatus status={connectionStatus} />
+        <ConnectionStatus status={connectionStatus} peers={peers} />
       </Card>
 
       <InfoTip icon="bolt" title="Peer-to-Peer Speed">

@@ -1,17 +1,28 @@
 import { Icon } from "../common";
 
-type ConnectionState =
+export type ConnectionState =
   | "waiting"
   | "connecting"
   | "connected"
   | "transferring"
   | "completed"
-  | "error";
+  | "error"
+  | "paused";
+
+export interface ConnectedPeer {
+  id: string;
+  name?: string;
+  status: "downloading" | "paused" | "completed";
+  progress: number;
+  speed?: number; // bytes per second
+  timeRemaining?: number; // seconds
+}
 
 interface ConnectionStatusProps {
   status: ConnectionState;
   message?: string;
   subMessage?: string;
+  peers?: ConnectedPeer[];
 }
 
 const statusConfig = {
@@ -63,12 +74,21 @@ const statusConfig = {
     defaultSubMessage: "Please try again",
     showSpinner: false,
   },
+  paused: {
+    label: "Paused",
+    labelColor: "text-yellow-400",
+    icon: "pause",
+    defaultMessage: "Transfer paused",
+    defaultSubMessage: "Waiting for peer to resume",
+    showSpinner: false,
+  },
 };
 
 export function ConnectionStatus({
   status,
   message,
   subMessage,
+  peers = [],
 }: ConnectionStatusProps) {
   const config = statusConfig[status];
 
@@ -137,6 +157,46 @@ export function ConnectionStatus({
           </span>
         </div>
       </div>
+
+      {/* Peer Progress List */}
+      {peers.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {peers.map((peer) => (
+            <div key={peer.id} className="bg-surface-dark border border-white/5 rounded-lg p-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs font-medium text-gray-300">
+                  {peer.name || "Device"} ({peer.status})
+                </span>
+                <span className="text-xs font-mono text-primary">
+                  {peer.progress.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-gray-800 rounded-full overflow-hidden mb-1">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    peer.status === "paused" ? "bg-yellow-500" : 
+                    peer.status === "completed" ? "bg-green-500" : "bg-primary"
+                  }`}
+                  style={{ width: `${peer.progress}%` }}
+                />
+              </div>
+              
+              {peer.status === "downloading" && peer.speed !== undefined && (
+                <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
+                  <span>{(peer.speed / (1024 * 1024)).toFixed(1)} MB/s</span>
+                  {peer.timeRemaining !== undefined && (
+                    <span>
+                      {peer.timeRemaining > 60 
+                        ? `${Math.floor(peer.timeRemaining / 60)}:${(peer.timeRemaining % 60).toFixed(0).padStart(2, '0')}`
+                        : `${peer.timeRemaining.toFixed(0)}s`} left
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@
  * Handles peer-to-peer file transfers using WebRTC data channels
  */
 
-const CHUNK_SIZE = 16384; // 16KB chunks
+const CHUNK_SIZE = 256 * 1024; // 256KB chunks for high performance
 
 export interface TransferProgress {
   fileId: string;
@@ -39,21 +39,69 @@ export class WebRTCFileTransfer {
   private transferStartTime: number = 0;
   private lastProgressUpdate: number = 0;
   private pendingChunkHeader: any = null; // Track the header for the next binary message
+  private isPaused: boolean = false;
+  private processQueueResolve: (() => void) | null = null;
+  private currentProgress: number = 0;
+
+  private onPeerProgressCallback: ((status: any) => void) | null = null;
 
   constructor(isSender: boolean) {
     this.isSender = isSender;
   }
 
   /**
+   * Set callback for receiving peer progress updates (Sender side)
+   */
+  onPeerProgress(callback: (status: any) => void): void {
+    this.onPeerProgressCallback = callback;
+  }
+
+  /**
+   * Send progress update to peer (Receiver side)
+   */
+  sendProgressReport(progress: number, status: 'downloading' | 'paused' | 'completed', speed?: number, timeRemaining?: number): void {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    try {
+        this.dataChannel.send(JSON.stringify({
+            type: 'progress_report',
+            progress,
+            status,
+            speed,
+            timeRemaining
+        }));
+    } catch (e) {
+        // Ignore errors sending progress reports (don't block transfer)
+    }
+  }
+
+  /**
    * Initialize WebRTC peer connection
    */
   async initialize(): Promise<void> {
-    // For local testing, empty iceServers works - host candidates are sufficient
-    // For production across networks, add STUN/TURN servers
+    // Check for environment configured ICE servers first
+    let iceServers: RTCIceServer[] = [];
+    
+    // @ts-ignore
+    const envIceServers = import.meta.env.VITE_ICE_SERVERS;
+    if (envIceServers) {
+      try {
+        iceServers = JSON.parse(envIceServers);
+      } catch (e) {
+        console.error("Failed to parse VITE_ICE_SERVERS", e);
+      }
+    }
+
+    // Default to Google's public STUN servers if none provided
+    if (iceServers.length === 0) {
+      iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+      ];
+    }
+
     const config: RTCConfiguration = {
-      iceServers: [], // Empty for local testing - generates host candidates only
-      // Uncomment for production:
-      // iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: iceServers
     };
 
     console.log('Initializing WebRTC with config:', config);
@@ -139,6 +187,42 @@ export class WebRTCFileTransfer {
       this.dataChannel.onmessage = (event) => {
         this.handleReceivedData(event.data);
       };
+    } else {
+      // Sender also needs to listen for control messages (pause/resume)
+      this.dataChannel.onmessage = (event) => {
+        this.handleReceivedData(event.data);
+      };
+    }
+  }
+
+  /**
+   * Send a control message (pause/resume/cancel)
+   */
+  sendControl(action: 'pause' | 'resume' | 'cancel'): void {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+    this.dataChannel.send(JSON.stringify({ type: 'control', action }));
+  }
+
+  /**
+   * Pause the transfer
+   */
+  pause(): void {
+    this.isPaused = true;
+    this.sendControl('pause');
+    this.sendProgressReport(this.currentProgress, 'paused');
+  }
+
+  /**
+   * Resume the transfer
+   */
+  resume(): void {
+    this.isPaused = false;
+    this.sendControl('resume');
+    this.sendProgressReport(this.currentProgress, 'downloading');
+    // If we are sender, we need to restart the loop if it was stopped
+    if (this.isSender && this.processQueueResolve) {
+       this.processQueueResolve();
+       this.processQueueResolve = null;
     }
   }
 
@@ -323,10 +407,21 @@ export class WebRTCFileTransfer {
     let offset = 0;
     let chunkIndex = 0;
 
-    const sendNextChunk = () => {
+    const sendNextChunk = async () => {
+      // CRITICAL: Stop immediately if channel is closed (fixes freeze)
+      if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
+        return;
+      }
+
+      // Check if paused
+      if (this.isPaused) {
+        await new Promise<void>((resolve) => {
+          this.processQueueResolve = resolve;
+        });
+      }
+
       if (offset >= file.size) {
-        // Send completion message
-        console.log(`File transfer complete: ${file.name} (${file.size} bytes)`);
+        console.log(`File transfer complete: ${file.name}`);
         this.dataChannel?.send(JSON.stringify({ type: 'complete', fileId: metadata.id }));
         return;
       }
@@ -339,8 +434,6 @@ export class WebRTCFileTransfer {
       if (!e.target?.result || !this.dataChannel) return;
 
       const arrayBuffer = e.target.result as ArrayBuffer;
-
-      // Send chunk with header
       const header = JSON.stringify({
         type: 'chunk',
         fileId: metadata.id,
@@ -348,34 +441,56 @@ export class WebRTCFileTransfer {
         totalChunks: metadata.totalChunks,
       });
 
-      this.dataChannel.send(header);
-      this.dataChannel.send(arrayBuffer);
+      try {
+        this.dataChannel.send(header);
+        this.dataChannel.send(arrayBuffer);
 
-      offset += CHUNK_SIZE;
-      chunkIndex++;
+        offset += CHUNK_SIZE;
+        chunkIndex++;
 
-      // Update progress
-      const progress = Math.min((offset / file.size) * 100, 100);
-      const elapsed = (Date.now() - this.transferStartTime) / 1000; // seconds
-      const speed = offset / elapsed;
-      const remaining = file.size - offset;
-      const timeRemaining = remaining / speed;
+        // Send progress updates less frequently (every 500ms) to save CPU
+        if (Date.now() - this.lastProgressUpdate > 500) {
+          const progress = Math.min((offset / file.size) * 100, 100);
+          const elapsed = (Date.now() - this.transferStartTime) / 1000;
+          const speed = offset / elapsed;
+          const remaining = file.size - offset;
+          
+          this.progressCallback?.({
+            fileId: metadata.id,
+            fileName: metadata.name,
+            progress,
+            bytesTransferred: offset,
+            totalBytes: file.size,
+            speed,
+            timeRemaining: remaining / speed,
+          });
+          this.lastProgressUpdate = Date.now();
+        }
 
-      if (Date.now() - this.lastProgressUpdate > 100) {
-        this.progressCallback?.({
-          fileId: metadata.id,
-          fileName: metadata.name,
-          progress,
-          bytesTransferred: offset,
-          totalBytes: file.size,
-          speed,
-          timeRemaining,
-        });
-        this.lastProgressUpdate = Date.now();
+        // Optimized Flow Control
+        // 2MB buffer threshold is good for high speed
+        const BUFFER_THRESHOLD = 2 * 1024 * 1024;
+        
+        if (this.dataChannel.bufferedAmount > BUFFER_THRESHOLD) {
+           const waitForBuffer = () => {
+             if (!this.dataChannel || this.dataChannel.readyState !== 'open') return;
+             if (this.isPaused) { sendNextChunk(); return; }
+
+             // Drain until below 256KB to keep pipe flowing
+             if (this.dataChannel.bufferedAmount > 256 * 1024) {
+               setTimeout(waitForBuffer, 2);
+             } else {
+               sendNextChunk();
+             }
+           };
+           waitForBuffer();
+        } else {
+           // Use minimal delay
+           setTimeout(sendNextChunk, 0);
+        }
+      } catch (err) {
+        console.error("Error sending chunk:", err);
       }
-
-      // Send next chunk
-      setTimeout(sendNextChunk, 0);
     };
 
     reader.onerror = () => {
@@ -394,7 +509,23 @@ export class WebRTCFileTransfer {
       try {
         const message = JSON.parse(data);
 
-        if (message.type === 'metadata') {
+        if (message.type === 'control') {
+          console.log('Received control message:', message.action);
+          if (message.action === 'pause') {
+            this.isPaused = true;
+            console.log('Transfer paused by peer');
+          } else if (message.action === 'resume') {
+            this.isPaused = false;
+            console.log('Transfer resumed by peer');
+            if (this.isSender && this.processQueueResolve) {
+              this.processQueueResolve();
+              this.processQueueResolve = null;
+            }
+          }
+        } else if (message.type === 'progress_report') {
+            // Handle progress report from receiver
+            this.onPeerProgressCallback?.(message);
+        } else if (message.type === 'metadata') {
           const metadata = message.data as FileTransferMetadata;
           this.fileMetadata.set(metadata.id, metadata);
           this.receivedChunks.set(metadata.id, []);
@@ -429,12 +560,13 @@ export class WebRTCFileTransfer {
         // Update progress
         const bytesTransferred = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
         const progress = Math.min((bytesTransferred / metadata.size) * 100, 100);
+        this.currentProgress = progress; // Store for pause state
         const elapsed = (Date.now() - this.transferStartTime) / 1000;
         const speed = bytesTransferred / elapsed;
         const remaining = metadata.size - bytesTransferred;
         const timeRemaining = remaining / speed;
 
-        if (Date.now() - this.lastProgressUpdate > 100) {
+        if (Date.now() - this.lastProgressUpdate > 500) {
           this.progressCallback?.({
             fileId,
             fileName: metadata.name,
@@ -444,10 +576,12 @@ export class WebRTCFileTransfer {
             speed,
             timeRemaining,
           });
+          
+          // Send progress report back to sender
+          this.sendProgressReport(progress, 'downloading', speed, remaining / speed);
+          
           this.lastProgressUpdate = Date.now();
         }
-
-        console.log(`Received chunk ${chunkIndex + 1}/${metadata.totalChunks} for ${metadata.name}`);
       } else {
         console.error('Cannot store chunk: missing metadata or chunks array for', fileId);
       }
@@ -473,6 +607,9 @@ export class WebRTCFileTransfer {
     console.log('File received:', metadata.name, blob.size, 'bytes');
 
     this.completionCallback?.(fileId, blob);
+    
+    // Send final completion status
+    this.sendProgressReport(100, 'completed');
 
     // Clean up
     this.receivedChunks.delete(fileId);
